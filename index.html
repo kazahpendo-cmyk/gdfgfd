@@ -1165,32 +1165,26 @@ async function generateAiVariant() {
     const t1 = TESTS[1];
     const exampleAnswers = [1,2,3,4].map(n => TESTS[n].answers.join(', ')).join(' | ');
 
-    const prompt = `Создай новый вариант математической контрольной работы (ЕГЭ) из 9 задач.
+    const v1ans = TESTS[1].answers.join(', ');
+    const v2ans = TESTS[2].answers.join(', ');
+    const prompt = `Ответь ТОЛЬКО JSON-объектом. Никакого текста до или после.
 
-Примеры ответов из 4 существующих вариантов (чтобы понять масштаб чисел):
-Вариант 1: ${TESTS[1].answers.join(', ')}
-Вариант 2: ${TESTS[2].answers.join(', ')}
-Вариант 3: ${TESTS[3].answers.join(', ')}
-Вариант 4: ${TESTS[4].answers.join(', ')}
+Создай 9 математических задач (ЕГЭ) с новыми числами. Примеры ответов: [${v1ans}] и [${v2ans}].
 
-Типы задач (строго по порядку, придумай НОВЫЕ числа):
-1. Проценты: "В фирме X% не знают языков. Из остальных Y-я часть знает [язык]. Сколько % знают [язык]?" → ответ целое число
-2. Выражение с дробными степенями: вида (C·a^(p/q)·a^(-r)) / a^(-s) при a=1/N → ответ целое или десятичная
-3. Тригонометрия: C·cos(π/p)·sin(-π/q) → ответ целое или десятичная
-4. Сумма бесконечной геопрогрессии: дано b1,b2,b3 → ответ целое или десятичная
-5. Абсцисса пересечения f(x)=a√x и g(x)=kx (кроме x=0) → ответ целое или десятичная
-6. Найти cos α, если sin α = √M/N и π/2 < α < π → ответ десятичная
-7. Количество корней тригоуравнения на отрезке → ответ ЦЕЛОЕ число
-8. Наибольшее целое решение рационального неравенства на отрезке → ответ ЦЕЛОЕ число
-9. Значение c при котором |x²-A|+Bx+C=c имеет нечётное число корней → ответ десятичная
+Задачи по порядку:
+1. Проценты: X% не знают языков, из остальных 1/Y часть знает язык, ответ целое число.
+2. Дробные степени: (C·a^(p/q)·a^(-r))/a^(-s) при a=1/N, ответ целое или десятичная.
+3. Тригонометрия: K·cos(π/p)·sin(-π/q), ответ целое или десятичная.
+4. Сумма геопрогрессии: даны b1,b2,b3, ответ целое или десятичная.
+5. Абсцисса пересечения a√x и kx, ответ целое или десятичная.
+6. cos α если sin α = √M/N и π/2<α<π, ответ десятичная.
+7. Количество корней тригоуравнения на отрезке, ответ ЦЕЛОЕ.
+8. Наибольшее целое решение неравенства на отрезке, ответ ЦЕЛОЕ.
+9. Значение c при котором |x²-A|+Bx+C=c имеет нечётное число корней, ответ десятичная.
 
-Правила:
-- Все ответы: только целые числа или конечные десятичные дроби (не 1/3, не√2)
-- Задачи математически корректны, проверь ответы перед выводом
-- Используй LaTeX в $...$ для формул
-
-ВАЖНО: твой ответ должен начинаться с символа { и заканчиваться символом }. Никакого текста до или после. Никаких markdown блоков. Только чистый JSON:
-{"questions":[{"text":"текст задачи","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"integer"},{"text":"...","type":"integer"},{"text":"...","type":"decimal"}],"answers":["a1","a2","a3","a4","a5","a6","a7","a8","a9"]}`;
+Все ответы: только целые числа или конечные десятичные дроби.
+Формулы в $...$. Ответ строго:
+{"questions":[{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"integer"},{"text":"...","type":"integer"},{"text":"...","type":"decimal"}],"answers":["a1","a2","a3","a4","a5","a6","a7","a8","a9"]}`;
 
     // Build headers - avoid HTTP-Referer for local file:// to prevent auth issues
     const reqHeaders = {
@@ -1206,7 +1200,7 @@ async function generateAiVariant() {
       headers: reqHeaders,
       body: JSON.stringify({
         model: selectedModel,
-        max_tokens: 2000,
+        max_tokens: 4000,
         temperature: 0.7,
         messages: [{ role: 'user', content: prompt }]
       })
@@ -1219,23 +1213,25 @@ async function generateAiVariant() {
     }
 
     const data = await response.json();
-    // DeepSeek reasoning models return content in message.content
-    // but sometimes it's empty and actual answer is in reasoning_content
-    // Also handle tool_calls and other edge cases
     const msg = data.choices?.[0]?.message || {};
-    let raw = (msg.content || msg.reasoning_content || '');
+    const finishReason = data.choices?.[0]?.finish_reason || '';
+    console.log('finish_reason:', finishReason);
+    console.log('message:', JSON.stringify(msg));
 
-    // Log full response to console for debugging
-    console.log('Full API response:', JSON.stringify(data, null, 2));
-    console.log('Raw content:', raw);
+    // DeepSeek V4 Flash: answer may be in reasoning, content, or both
+    let raw = msg.content || msg.reasoning || msg.reasoning_content || '';
+
+    // If reasoning model put everything in reasoning field, extract JSON from it
+    if (!raw || raw.trim() === 'null') {
+      throw new Error('Пустой ответ от модели.');
+    }
+
+    if (finishReason === 'length') {
+      throw new Error('Модель обрезала ответ (finish_reason=length). Попробуйте ещё раз — иногда со второй попытки получается.');
+    }
 
     // Clean markdown fences
     raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
-
-    // If still empty, show full response for debugging
-    if (!raw) {
-      throw new Error('Пустой ответ от модели. Полный ответ в консоли (F12).');
-    }
 
     let parsed;
     try { parsed = JSON.parse(raw); }
