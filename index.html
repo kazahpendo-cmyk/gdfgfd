@@ -717,6 +717,15 @@ window.MathJax = {
       placeholder="sk-or-v1-..."
       autocomplete="off"
     />
+    <select id="model-select" class="api-key-input" style="margin-bottom:1rem; cursor:pointer;">
+      <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5 (рекомендуется)</option>
+      <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 (бесплатно)</option>
+      <option value="deepseek/deepseek-r1:free">DeepSeek R1 (бесплатно)</option>
+      <option value="google/gemini-flash-1.5">Gemini Flash 1.5</option>
+      <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+      <option value="openai/gpt-4o">GPT-4o</option>
+      <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (бесплатно)</option>
+    </select>
     <div class="modal-buttons">
       <button class="btn btn-ghost" onclick="closeApiModal()">Отмена</button>
       <button class="btn btn-primary" onclick="generateAiVariant()" id="generate-btn">Создать вариант</button>
@@ -1129,6 +1138,8 @@ function goHome() {
 function openApiModal() {
   const saved = sessionStorage.getItem('or_api_key');
   if (saved) document.getElementById('api-key-input').value = saved;
+  const savedModel = sessionStorage.getItem('or_model');
+  if (savedModel) document.getElementById('model-select').value = savedModel;
   document.getElementById('api-modal').classList.add('open');
 }
 
@@ -1139,7 +1150,9 @@ function closeApiModal() {
 async function generateAiVariant() {
   const key = document.getElementById('api-key-input').value.trim();
   if (!key) { alert('Введите API ключ OpenRouter'); return; }
+  const selectedModel = document.getElementById('model-select').value;
   sessionStorage.setItem('or_api_key', key);
+  sessionStorage.setItem('or_model', selectedModel);
   closeApiModal();
 
   document.getElementById('ai-loading-modal').classList.add('open');
@@ -1177,8 +1190,8 @@ async function generateAiVariant() {
 - Задачи математически корректны, проверь ответы перед выводом
 - Используй LaTeX в $...$ для формул
 
-Верни ТОЛЬКО JSON, без markdown:
-{"questions":[{"text":"текст задачи","type":"decimal"},...],"answers":["a1","a2","a3","a4","a5","a6","a7","a8","a9"]}`;
+ВАЖНО: твой ответ должен начинаться с символа { и заканчиваться символом }. Никакого текста до или после. Никаких markdown блоков. Только чистый JSON:
+{"questions":[{"text":"текст задачи","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"decimal"},{"text":"...","type":"integer"},{"text":"...","type":"integer"},{"text":"...","type":"decimal"}],"answers":["a1","a2","a3","a4","a5","a6","a7","a8","a9"]}`;
 
     // Build headers - avoid HTTP-Referer for local file:// to prevent auth issues
     const reqHeaders = {
@@ -1193,7 +1206,7 @@ async function generateAiVariant() {
       method: 'POST',
       headers: reqHeaders,
       body: JSON.stringify({
-        model: 'deepseek/deepseek-v4-flash:free',
+        model: selectedModel,
         max_tokens: 2000,
         temperature: 0.7,
         messages: [{ role: 'user', content: prompt }]
