@@ -1219,7 +1219,23 @@ async function generateAiVariant() {
     }
 
     const data = await response.json();
-    let raw = (data.choices?.[0]?.message?.content || '').replace(/```json\s*/gi,'').replace(/```\s*/gi,'').trim();
+    // DeepSeek reasoning models return content in message.content
+    // but sometimes it's empty and actual answer is in reasoning_content
+    // Also handle tool_calls and other edge cases
+    const msg = data.choices?.[0]?.message || {};
+    let raw = (msg.content || msg.reasoning_content || '');
+
+    // Log full response to console for debugging
+    console.log('Full API response:', JSON.stringify(data, null, 2));
+    console.log('Raw content:', raw);
+
+    // Clean markdown fences
+    raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+
+    // If still empty, show full response for debugging
+    if (!raw) {
+      throw new Error('Пустой ответ от модели. Полный ответ в консоли (F12).');
+    }
 
     let parsed;
     try { parsed = JSON.parse(raw); }
