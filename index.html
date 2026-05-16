@@ -1212,13 +1212,24 @@ async function generateAiVariant() {
     let parsed;
     try { parsed = JSON.parse(raw); }
     catch(e) {
+      // Try to extract JSON object from response
       const m = raw.match(/\{[\s\S]*\}/);
-      if (m) parsed = JSON.parse(m[0]);
-      else throw new Error('Не удалось разобрать ответ ИИ. Попробуйте ещё раз.');
+      if (m) {
+        try { parsed = JSON.parse(m[0]); }
+        catch(e2) {
+          console.error('Raw AI response:', raw);
+          throw new Error('Ответ ИИ:\n' + raw.substring(0, 300));
+        }
+      } else {
+        console.error('Raw AI response:', raw);
+        throw new Error('Ответ ИИ не содержит JSON:\n' + raw.substring(0, 300));
+      }
     }
 
-    if (!parsed.questions || !parsed.answers || parsed.questions.length !== 9 || parsed.answers.length !== 9)
-      throw new Error('ИИ вернул неверную структуру. Попробуйте ещё раз.');
+    if (!parsed.questions || !parsed.answers || parsed.questions.length !== 9 || parsed.answers.length !== 9) {
+      console.error('Parsed object:', parsed);
+      throw new Error('Неверная структура JSON. Вопросов: ' + (parsed.questions?.length ?? 'нет') + ', ответов: ' + (parsed.answers?.length ?? 'нет'));
+    }
 
     TESTS[5] = { label: 'ИИ-вариант', questions: parsed.questions, answers: parsed.answers };
 
